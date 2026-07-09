@@ -13,13 +13,13 @@ Add your screenshots here before final submission.
 
 Replace this placeholder with your database screenshot:
 
-![Database Structure Screenshot](./screenshots/database-structure.png)
+![Database Structure Screenshot](image.png)
 
 ### API Structure Screenshot
 
 Replace this placeholder with your API structure screenshot:
 
-![API Structure Screenshot](./screenshots/api-structure.png)
+![API Structure Screenshot](image-1.png)
 
 ## Postman Import (Swagger JSON)
 
