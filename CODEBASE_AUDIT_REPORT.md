@@ -323,3 +323,21 @@ Bottom line: in its current state, this implementation is unlikely to pass compe
 6. Coverage hardening: M-05.
 
 ---
+
+## Addendum: External Checklist Cross-Check (2026-07-09)
+
+I re-checked the additional issue list provided from the forked-agent review.
+
+- Coverage against this report: all listed issue categories were already represented in this report (high/medium/low buckets).
+- Missing-category additions required: none.
+
+### Final unresolved item found during re-check and fixed
+
+- Rate-limit concurrency robustness was further hardened to serialize the rolling-window check + insert under SQLite write locking in `app/services/ratelimit.py`.
+
+### Re-validation after final fix
+
+- Full test suite: `6 passed`.
+- Targeted rate-limit probe: 20 successful booking requests and 21st request correctly rejected with `429 RATE_LIMITED`.
+
+Status after this addendum: the issue set from both the original audit and the external checklist has been addressed in code.

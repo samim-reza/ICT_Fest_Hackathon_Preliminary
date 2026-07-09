@@ -1,6 +1,7 @@
 """Per-user rolling-window rate limiting for booking creation."""
 from datetime import datetime, timedelta, timezone
 
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from ..errors import AppError
@@ -18,6 +19,8 @@ def record_and_check(db: Session, user_id: int) -> None:
     now = _utcnow_naive()
     cutoff = now - timedelta(seconds=_WINDOW_SECONDS)
 
+    # Serialize check+insert so the rolling-window rule holds under concurrency.
+    db.execute(text("BEGIN IMMEDIATE"))
     db.query(RateLimitEvent).filter(
         RateLimitEvent.user_id == user_id,
         RateLimitEvent.created_at <= cutoff,
