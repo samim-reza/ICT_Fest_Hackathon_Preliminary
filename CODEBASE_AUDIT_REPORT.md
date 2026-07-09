@@ -323,7 +323,3 @@ Bottom line: in its current state, this implementation is unlikely to pass compe
 6. Coverage hardening: M-05.
 
 ---
-
-## Win Probability Note
-
-Given current defects, hidden grading is likely to fail across auth, pagination, refund, multi-tenancy, and concurrency rules. If you fix the high-risk items above first and add rule-based tests, your win probability increases dramatically.
