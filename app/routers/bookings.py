@@ -101,7 +101,8 @@ def create_booking(
         if _has_conflict(db, room.id, start, end):
             raise AppError(409, "ROOM_CONFLICT", "Room already booked for this interval")
 
-        _check_quota(db, user.id, now, start)
+        if user.role == "member":
+            _check_quota(db, user.id, now, start)
 
         price_cents = room.hourly_rate_cents * duration_hours
         booking = Booking(

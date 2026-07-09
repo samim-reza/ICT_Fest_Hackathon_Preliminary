@@ -310,10 +310,10 @@ def test_usage_report_availability_stats_and_export_tenant_isolation():
 def test_concurrent_conflict_and_quota_enforcement():
     org = _unique_name("org-concurrent")
     assert _register(org, "admin").status_code == 201
-    login = _login(org, "admin")
-    token = login.json()["access_token"]
-    headers = _auth_headers(token)
-    room_id = _create_room(headers)
+    assert _register(org, "member").status_code == 201
+    admin_token = _login(org, "admin").json()["access_token"]
+    member_token = _login(org, "member").json()["access_token"]
+    room_id = _create_room(_auth_headers(admin_token))
 
     def create_in_thread(start: datetime, end: datetime):
         with TestClient(app) as local_client:
@@ -324,7 +324,7 @@ def test_concurrent_conflict_and_quota_enforcement():
                     "start_time": start.isoformat(),
                     "end_time": end.isoformat(),
                 },
-                headers=_auth_headers(token),
+                headers=_auth_headers(member_token),
             )
 
     conflict_start = _future_aligned(70)
@@ -348,6 +348,38 @@ def test_concurrent_conflict_and_quota_enforcement():
     assert quota_statuses.count(201) == 3
     quota_errors = [r.json().get("code") for r in quota_responses if r.status_code == 409]
     assert quota_errors == ["QUOTA_EXCEEDED"]
+
+
+def test_booking_quota_applies_to_members_only():
+    org = _unique_name("org-member-quota")
+    assert _register(org, "admin").status_code == 201
+    assert _register(org, "member").status_code == 201
+
+    admin_headers = _auth_headers(_login(org, "admin").json()["access_token"])
+    member_headers = _auth_headers(_login(org, "member").json()["access_token"])
+
+    room_id = _create_room(admin_headers)
+
+    # Member: 4th booking within 24h must fail with QUOTA_EXCEEDED.
+    member_statuses = []
+    for hour in [2, 4, 6, 8]:
+        start = _future_aligned(hour)
+        end = _future_aligned(hour + 1)
+        resp = _create_booking(member_headers, room_id, start, end)
+        member_statuses.append((resp.status_code, resp.json().get("code")))
+
+    assert [s for s, _ in member_statuses].count(201) == 3
+    assert member_statuses[-1] == (409, "QUOTA_EXCEEDED")
+
+    # Admin: same window should not be blocked by member quota rule.
+    admin_statuses = []
+    for hour in [10, 12, 14, 16]:
+        start = _future_aligned(hour)
+        end = _future_aligned(hour + 1)
+        resp = _create_booking(admin_headers, room_id, start, end)
+        admin_statuses.append(resp.status_code)
+
+    assert admin_statuses == [201, 201, 201, 201]
 
 
 def test_registration_concurrent_duplicate_username_returns_409():

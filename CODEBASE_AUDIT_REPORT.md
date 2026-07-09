@@ -331,13 +331,15 @@ I re-checked the additional issue list provided from the forked-agent review.
 - Coverage against this report: all listed issue categories were already represented in this report (high/medium/low buckets).
 - Missing-category additions required: one.
 
-### Newly noted issue (not explicitly listed in original report)
+### Newly noted issues (not explicitly listed in original report)
 
 - Concurrent registration race in `POST /auth/register` could raise an unhandled DB `IntegrityError` for duplicate username/org creation races, which surfaced as server failure instead of contract response (`409 USERNAME_TAKEN` for duplicate usernames).
 - This has been fixed by making registration transactionally serialized (`BEGIN IMMEDIATE`) with retry and deterministic duplicate-username mapping.
 - New concurrency tests were added to verify:
   - duplicate username race returns one `201` + one `409 USERNAME_TAKEN`
   - concurrent first registrations into the same new org result in one `admin` and one `member`.
+- Booking quota wording in the rulebook applies specifically to members; booking creation was hardened to enforce quota only when `user.role == "member"`.
+- A regression test was added to verify member quota enforcement and admin exemption in the same 24h window.
 
 ### Final unresolved item found during re-check and fixed
 
@@ -345,7 +347,7 @@ I re-checked the additional issue list provided from the forked-agent review.
 
 ### Re-validation after final fix
 
-- Full test suite: `6 passed`.
+- Full test suite: `9 passed`.
 - Targeted rate-limit probe: 20 successful booking requests and 21st request correctly rejected with `429 RATE_LIMITED`.
 
 Status after this addendum: the issue set from both the original audit and the external checklist has been addressed in code.
