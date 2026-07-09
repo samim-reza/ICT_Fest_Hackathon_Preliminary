@@ -5,6 +5,36 @@ multiple tenant organizations. Each organization has its own rooms, staff
 (admins), and members. Members book rooms for time slots; admins manage rooms and
 pull reports.
 
+## Architecture Screenshots
+
+Add your screenshots here before final submission.
+
+### Database Structure Screenshot
+
+Replace this placeholder with your database screenshot:
+
+![Database Structure Screenshot](./screenshots/database-structure.png)
+
+### API Structure Screenshot
+
+Replace this placeholder with your API structure screenshot:
+
+![API Structure Screenshot](./screenshots/api-structure.png)
+
+## Postman Import (Swagger JSON)
+
+You can import the API in Postman in two ways:
+
+1. Import from local file:
+   - Use the generated file `swagger.json` from the project root.
+   - In Postman: Import -> Files -> select `swagger.json`.
+
+2. Import from running API URL:
+   - Start the API and use `http://localhost:8000/openapi.json`.
+   - In Postman: Import -> Link -> paste that URL.
+
+This loads all endpoints, request bodies, and response schemas automatically.
+
 ## Stack
 
 - Python 3.11, FastAPI, SQLAlchemy, SQLite (single file, no external DB service)
