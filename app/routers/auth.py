@@ -77,10 +77,10 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)):
 @router.post("/refresh")
 def refresh(payload: RefreshRequest, db: Session = Depends(get_db)):
     data = decode_token(payload.refresh_token)
-    consume_refresh_token(data)
+    consume_refresh_token(data, db)
     user = db.query(User).filter(User.id == int(data["sub"])).first()
     if user is None:
-        raise AppError(401, "UNAUTHORIZED", "Unknown user")
+        raise AppError(401, "INVALID_CREDENTIALS", "Unknown user")
     return {
         "access_token": create_access_token(user),
         "refresh_token": create_refresh_token(user),
@@ -89,6 +89,6 @@ def refresh(payload: RefreshRequest, db: Session = Depends(get_db)):
 
 
 @router.post("/logout")
-def logout(payload: dict = Depends(get_token_payload)):
-    revoke_access_token(payload)
+def logout(payload: dict = Depends(get_token_payload), db: Session = Depends(get_db)):
+    revoke_access_token(payload, db)
     return {"status": "ok"}

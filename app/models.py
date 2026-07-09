@@ -74,3 +74,30 @@ class RefundLog(Base):
     amount_cents = Column(Integer, nullable=False)
     status = Column(String, nullable=False)
     processed_at = Column(DateTime, default=utcnow_naive, nullable=False)
+
+
+class RevokedToken(Base):
+    __tablename__ = "revoked_tokens"
+    __table_args__ = (UniqueConstraint("jti", name="uq_revoked_token_jti"),)
+
+    id = Column(Integer, primary_key=True)
+    jti = Column(String, nullable=False, index=True)
+    token_type = Column(String, nullable=False)
+    created_at = Column(DateTime, default=utcnow_naive, nullable=False)
+
+
+class UsedRefreshToken(Base):
+    __tablename__ = "used_refresh_tokens"
+    __table_args__ = (UniqueConstraint("jti", name="uq_used_refresh_jti"),)
+
+    id = Column(Integer, primary_key=True)
+    jti = Column(String, nullable=False, index=True)
+    used_at = Column(DateTime, default=utcnow_naive, nullable=False)
+
+
+class RateLimitEvent(Base):
+    __tablename__ = "rate_limit_events"
+
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    created_at = Column(DateTime, default=utcnow_naive, nullable=False, index=True)

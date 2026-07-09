@@ -74,5 +74,5 @@ def export(
         if room is None:
             raise AppError(404, "ROOM_NOT_FOUND", "Room not found")
 
-    csv_body = generate_export(db, admin.org_id, admin.id, room_id, include_all)
+    csv_body = generate_export(db, admin.org_id, room_id, include_all)
     return Response(content=csv_body, media_type="text/csv")

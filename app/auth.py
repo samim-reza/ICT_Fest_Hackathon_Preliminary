@@ -2,12 +2,12 @@
 import hashlib
 import hmac
 import os
-import threading
 import uuid
 from datetime import datetime, timedelta, timezone
 
 import jwt
 from fastapi import Depends, Request
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from .config import (
@@ -18,13 +18,9 @@ from .config import (
 )
 from .database import get_db
 from .errors import AppError
-from .models import User
+from .models import RevokedToken, UsedRefreshToken, User
 
-# Access tokens presented to /auth/logout are recorded here so they can no
-# longer be used.
-_revoked_access_jtis: set[str] = set()
-_used_refresh_jtis: set[str] = set()
-_token_lock = threading.Lock()
+AUTH_ERROR_CODE = "INVALID_CREDENTIALS"
 
 _PBKDF2_ROUNDS = 100_000
 
@@ -82,44 +78,51 @@ def decode_token(token: str) -> dict:
     try:
         return jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
     except jwt.PyJWTError:
-        raise AppError(401, "UNAUTHORIZED", "Invalid or expired token")
+        raise AppError(401, AUTH_ERROR_CODE, "Invalid or expired token")
 
 
-def revoke_access_token(payload: dict) -> None:
+def revoke_access_token(payload: dict, db: Session) -> None:
     jti = payload.get("jti")
     if not jti:
         return
-    with _token_lock:
-        _revoked_access_jtis.add(jti)
+    try:
+        db.add(RevokedToken(jti=jti, token_type="access"))
+        db.commit()
+    except IntegrityError:
+        db.rollback()
 
 
-def consume_refresh_token(payload: dict) -> None:
+def consume_refresh_token(payload: dict, db: Session) -> None:
     if payload.get("type") != "refresh":
-        raise AppError(401, "UNAUTHORIZED", "Wrong token type")
+        raise AppError(401, AUTH_ERROR_CODE, "Wrong token type")
     jti = payload.get("jti")
     if not jti:
-        raise AppError(401, "UNAUTHORIZED", "Invalid token")
-    with _token_lock:
-        if jti in _used_refresh_jtis:
-            raise AppError(401, "UNAUTHORIZED", "Refresh token has been used")
-        _used_refresh_jtis.add(jti)
+        raise AppError(401, AUTH_ERROR_CODE, "Invalid token")
+    try:
+        db.add(UsedRefreshToken(jti=jti))
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise AppError(401, AUTH_ERROR_CODE, "Refresh token has been used")
 
 
-def get_token_payload(request: Request) -> dict:
+def get_token_payload(
+    request: Request,
+    db: Session = Depends(get_db),
+) -> dict:
     header = request.headers.get("Authorization")
     if not header or not header.startswith("Bearer "):
-        raise AppError(401, "UNAUTHORIZED", "Missing bearer token")
+        raise AppError(401, AUTH_ERROR_CODE, "Missing bearer token")
     token = header[len("Bearer "):].strip()
     payload = decode_token(token)
     if payload.get("type") != "access":
-        raise AppError(401, "UNAUTHORIZED", "Wrong token type")
+        raise AppError(401, AUTH_ERROR_CODE, "Wrong token type")
     jti = payload.get("jti")
     if not jti:
-        raise AppError(401, "UNAUTHORIZED", "Invalid token")
-    with _token_lock:
-        revoked = jti in _revoked_access_jtis
+        raise AppError(401, AUTH_ERROR_CODE, "Invalid token")
+    revoked = db.query(RevokedToken.id).filter(RevokedToken.jti == jti).first() is not None
     if revoked:
-        raise AppError(401, "UNAUTHORIZED", "Token has been revoked")
+        raise AppError(401, AUTH_ERROR_CODE, "Token has been revoked")
     return payload
 
 
@@ -129,7 +132,7 @@ def get_current_user(
 ) -> User:
     user = db.query(User).filter(User.id == int(payload["sub"])).first()
     if user is None:
-        raise AppError(401, "UNAUTHORIZED", "Unknown user")
+        raise AppError(401, AUTH_ERROR_CODE, "Unknown user")
     return user
 
 
