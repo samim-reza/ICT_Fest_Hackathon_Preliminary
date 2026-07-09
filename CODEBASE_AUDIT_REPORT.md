@@ -329,7 +329,15 @@ Bottom line: in its current state, this implementation is unlikely to pass compe
 I re-checked the additional issue list provided from the forked-agent review.
 
 - Coverage against this report: all listed issue categories were already represented in this report (high/medium/low buckets).
-- Missing-category additions required: none.
+- Missing-category additions required: one.
+
+### Newly noted issue (not explicitly listed in original report)
+
+- Concurrent registration race in `POST /auth/register` could raise an unhandled DB `IntegrityError` for duplicate username/org creation races, which surfaced as server failure instead of contract response (`409 USERNAME_TAKEN` for duplicate usernames).
+- This has been fixed by making registration transactionally serialized (`BEGIN IMMEDIATE`) with retry and deterministic duplicate-username mapping.
+- New concurrency tests were added to verify:
+  - duplicate username race returns one `201` + one `409 USERNAME_TAKEN`
+  - concurrent first registrations into the same new org result in one `admin` and one `member`.
 
 ### Final unresolved item found during re-check and fixed
 

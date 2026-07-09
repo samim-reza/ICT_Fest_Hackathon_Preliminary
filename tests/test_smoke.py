@@ -348,3 +348,44 @@ def test_concurrent_conflict_and_quota_enforcement():
     assert quota_statuses.count(201) == 3
     quota_errors = [r.json().get("code") for r in quota_responses if r.status_code == 409]
     assert quota_errors == ["QUOTA_EXCEEDED"]
+
+
+def test_registration_concurrent_duplicate_username_returns_409():
+    org = _unique_name("org-register-race")
+
+    def register_same(_):
+        with TestClient(app) as local_client:
+            resp = local_client.post(
+                "/auth/register",
+                json={"org_name": org, "username": "same", "password": "pw12345"},
+            )
+            return resp.status_code, resp.json().get("code")
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        results = list(pool.map(register_same, [0, 1]))
+
+    statuses = [status for status, _ in results]
+    assert statuses.count(201) == 1
+    assert statuses.count(409) == 1
+    codes_409 = [code for status, code in results if status == 409]
+    assert codes_409 == ["USERNAME_TAKEN"]
+
+
+def test_registration_concurrent_new_org_assigns_admin_then_member():
+    org = _unique_name("org-register-role-race")
+
+    def register_user(username):
+        with TestClient(app) as local_client:
+            resp = local_client.post(
+                "/auth/register",
+                json={"org_name": org, "username": username, "password": "pw12345"},
+            )
+            return resp.status_code, resp.json().get("role")
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        results = list(pool.map(register_user, ["u1", "u2"]))
+
+    statuses = [status for status, _ in results]
+    roles = sorted([role for _, role in results])
+    assert statuses == [201, 201]
+    assert roles == ["admin", "member"]

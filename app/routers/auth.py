@@ -1,5 +1,7 @@
 """Authentication endpoints: register, login, refresh, logout."""
 from fastapi import APIRouter, Depends
+from sqlalchemy import text
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from ..auth import (
@@ -22,37 +24,50 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 
 @router.post("/register", status_code=201)
 def register(payload: RegisterRequest, db: Session = Depends(get_db)):
-    org = db.query(Organization).filter(Organization.name == payload.org_name).first()
-    role = "admin" if org is None else "member"
-    if org is None:
-        org = Organization(name=payload.org_name)
-        db.add(org)
-        db.commit()
-        db.refresh(org)
+    # Retry once to handle organization-name races cleanly.
+    for _ in range(2):
+        try:
+            db.execute(text("BEGIN IMMEDIATE"))
 
-    existing = (
-        db.query(User)
-        .filter(User.org_id == org.id, User.username == payload.username)
-        .first()
-    )
-    if existing is not None:
-        raise AppError(409, "USERNAME_TAKEN", "Username already taken")
+            org = db.query(Organization).filter(Organization.name == payload.org_name).first()
+            role = "member"
+            if org is None:
+                org = Organization(name=payload.org_name)
+                db.add(org)
+                db.flush()
+                role = "admin"
 
-    user = User(
-        org_id=org.id,
-        username=payload.username,
-        hashed_password=hash_password(payload.password),
-        role=role,
-    )
-    db.add(user)
-    db.commit()
-    db.refresh(user)
-    return {
-        "user_id": user.id,
-        "org_id": org.id,
-        "username": user.username,
-        "role": user.role,
-    }
+            existing = (
+                db.query(User)
+                .filter(User.org_id == org.id, User.username == payload.username)
+                .first()
+            )
+            if existing is not None:
+                raise AppError(409, "USERNAME_TAKEN", "Username already taken")
+
+            user = User(
+                org_id=org.id,
+                username=payload.username,
+                hashed_password=hash_password(payload.password),
+                role=role,
+            )
+            db.add(user)
+            db.commit()
+            db.refresh(user)
+            return {
+                "user_id": user.id,
+                "org_id": org.id,
+                "username": user.username,
+                "role": user.role,
+            }
+        except AppError:
+            db.rollback()
+            raise
+        except IntegrityError:
+            db.rollback()
+
+    # If the race persists, map to contract-specific duplicate username response.
+    raise AppError(409, "USERNAME_TAKEN", "Username already taken")
 
 
 @router.post("/login")
