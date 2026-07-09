@@ -2,7 +2,8 @@
 
 Each booking change sends a (simulated) notification email and appends an
 audit-log entry. Both resources are guarded by locks so their output stays
-consistent when many requests are processed at once.
+consistent when many requests are processed at once. Locks are never held
+while acquiring the other, so no lock-ordering deadlock is possible.
 """
 import threading
 import time
@@ -24,12 +25,12 @@ def _write_audit(kind: str, booking) -> None:
 def notify_created(booking) -> None:
     with _email_lock:
         _send_email("created", booking)
-        with _audit_lock:
-            _write_audit("created", booking)
+    with _audit_lock:
+        _write_audit("created", booking)
 
 
 def notify_cancelled(booking) -> None:
+    with _email_lock:
+        _send_email("cancelled", booking)
     with _audit_lock:
         _write_audit("cancelled", booking)
-        with _email_lock:
-            _send_email("cancelled", booking)
