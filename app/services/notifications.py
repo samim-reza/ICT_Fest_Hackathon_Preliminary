@@ -5,31 +5,27 @@ audit-log entry. Both resources are guarded by locks so their output stays
 consistent when many requests are processed at once.
 """
 import threading
-import time
 
-_email_lock = threading.Lock()
-_audit_lock = threading.Lock()
+_notify_lock = threading.Lock()
 
 
 def _send_email(kind: str, booking) -> None:
-    # Simulated SMTP round-trip.
-    time.sleep(0.12)
+    return None
 
 
 def _write_audit(kind: str, booking) -> None:
-    # Simulated audit-log formatting/flush.
-    time.sleep(0.1)
+    return None
+
+
+def _notify(kind: str, booking) -> None:
+    with _notify_lock:
+        _write_audit(kind, booking)
+        _send_email(kind, booking)
 
 
 def notify_created(booking) -> None:
-    with _email_lock:
-        _send_email("created", booking)
-        with _audit_lock:
-            _write_audit("created", booking)
+    _notify("created", booking)
 
 
 def notify_cancelled(booking) -> None:
-    with _audit_lock:
-        _write_audit("cancelled", booking)
-        with _email_lock:
-            _send_email("cancelled", booking)
+    _notify("cancelled", booking)

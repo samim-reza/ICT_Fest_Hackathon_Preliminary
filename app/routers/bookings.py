@@ -15,7 +15,7 @@ from ..schemas import BookingCreateRequest
 from ..serializers import serialize_booking
 from ..services import notifications, ratelimit, reference
 from ..services.refunds import calculate_refund_amount, log_refund
-from ..timeutils import parse_input_datetime
+from ..timeutils import iso_utc, parse_input_datetime
 
 router = APIRouter(tags=["bookings"])
 
