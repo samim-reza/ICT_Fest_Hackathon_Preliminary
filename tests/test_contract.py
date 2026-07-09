@@ -304,14 +304,34 @@ def test_quota_concurrent(org):
 def test_rate_limit_20_per_60s():
     name = f"org-{uuid.uuid4().hex[:10]}"
     _register(name, "burst")
+    _register(name, "calm")
     h = _hdr(_login(name, "burst"))
-    # invalid-window requests still count toward the limit
-    payload = {"room_id": 1, "start_time": _future(-2), "end_time": _future(-1)}
+    room = client.post(
+        "/rooms", json={"name": "rl", "capacity": 1, "hourly_rate_cents": 100},
+        headers=h,
+    ).json()["id"]
+
+    # a successful booking counts toward the limit too
+    assert _book(h, room, _future(200), _future(201)).status_code == 201
+
+    # 24 more requests (invalid window, still counted): total 25 -> 5 over limit
+    payload = {"room_id": room, "start_time": _future(-2), "end_time": _future(-1)}
     with cf.ThreadPoolExecutor(10) as ex:
-        res = list(ex.map(lambda _: client.post("/bookings", json=payload, headers=h), range(25)))
+        res = list(ex.map(lambda _: client.post("/bookings", json=payload, headers=h), range(24)))
     codes = [r.status_code for r in res]
     assert codes.count(429) == 5, sorted(codes)
     assert all(r.json()["code"] == "RATE_LIMITED" for r in res if r.status_code == 429)
+
+    # once over the limit, every further POST /bookings is 429...
+    assert _book(h, room, _future(202), _future(203)).status_code == 429
+    # ...but the same user's other endpoints are not rate limited
+    assert client.get("/bookings", headers=h).status_code == 200
+    assert client.get("/rooms", headers=h).status_code == 200
+    assert client.get(f"/rooms/{room}/stats", headers=h).status_code == 200
+
+    # and another user in the same org is unaffected
+    other = _hdr(_login(name, "calm"))
+    assert _book(other, room, _future(210), _future(211)).status_code == 201
 
 
 # ---------- reference codes (rule 7) ----------
