@@ -11,8 +11,25 @@ from ..database import get_db
 from ..errors import AppError
 from ..models import Booking, Room, User
 from ..services.export import generate_export
+from ..timeutils import parse_input_datetime
 
 router = APIRouter(prefix="/admin", tags=["admin"])
+
+
+def _parse_bound(value: str, end_of_day: bool) -> datetime:
+    """Parse a range bound as an inclusive UTC instant.
+
+    Date-only values cover the whole UTC day, so the ``to`` bound extends to
+    the end of that day. Full datetimes are used as-is (normalized to UTC).
+    """
+    try:
+        day = datetime.strptime(value, "%Y-%m-%d").date()
+    except ValueError:
+        return parse_input_datetime(value)
+    bound = datetime.combine(day, time.min)
+    if end_of_day:
+        bound = bound + timedelta(days=1) - timedelta(microseconds=1)
+    return bound
 
 
 @router.get("/usage-report")
@@ -27,13 +44,10 @@ def usage_report(
         return cached
 
     try:
-        from_date = datetime.strptime(frm, "%Y-%m-%d").date()
-        to_date = datetime.strptime(to, "%Y-%m-%d").date()
+        range_start = _parse_bound(frm, end_of_day=False)
+        range_end = _parse_bound(to, end_of_day=True)
     except ValueError:
         raise AppError(400, "INVALID_BOOKING_WINDOW", "Invalid date range")
-
-    range_start = datetime.combine(from_date, time.min)
-    range_end = datetime.combine(to_date + timedelta(days=1), time.min)
 
     rooms = db.query(Room).filter(Room.org_id == admin.org_id).order_by(Room.id.asc()).all()
     room_rows = []
@@ -44,7 +58,7 @@ def usage_report(
                 Booking.room_id == room.id,
                 Booking.status == "confirmed",
                 Booking.start_time >= range_start,
-                Booking.start_time < range_end,
+                Booking.start_time <= range_end,
             )
             .all()
         )
